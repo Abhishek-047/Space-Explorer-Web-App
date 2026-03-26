@@ -13,6 +13,51 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- ===== HERO LANDING SECTION ===== -->
+  <section class="landing-hero" id="landing-hero">
+    <div class="landing-noise"></div>
+
+    <!-- Background radial glows -->
+    <div class="landing-bg-glow landing-bg-glow--left"></div>
+    <div class="landing-bg-glow landing-bg-glow--right"></div>
+
+    <div class="landing-inner">
+
+      <!-- LEFT: text content -->
+      <div class="landing-text">
+        <p class="landing-eyebrow">✦ NASA Powered · Live Discovery</p>
+        <h1 class="landing-heading">
+          Space<br /><span class="landing-heading-accent">Explorer</span>
+        </h1>
+        <p class="landing-desc">
+          Journey beyond the horizon. Discover galaxies, nebulae, black holes
+          and every wonder NASA has ever captured — all in one cinematic view.
+        </p>
+        <button class="landing-cta" id="landing-explore-btn" type="button">
+          <span class="landing-cta-icon">✦</span>
+          Explore Universe
+          <span class="landing-cta-arrow">→</span>
+        </button>
+      </div>
+
+      <!-- RIGHT: glowing globe -->
+      <div class="landing-globe-wrap">
+        <div class="landing-globe-ring landing-globe-ring--1"></div>
+        <div class="landing-globe-ring landing-globe-ring--2"></div>
+        <div class="landing-globe-ring landing-globe-ring--3"></div>
+        <img
+          class="landing-globe"
+          src="hero-globe.png"
+          alt="Glowing Earth from space"
+        />
+        <div class="landing-globe-halo"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===== EXISTING APP (hidden until Explore is clicked) ===== -->
+  <div id="app-wrapper" style="display:none;">
   <div class="page-shell">
     <div class="space-noise"></div>
 
@@ -179,6 +224,7 @@
       </section>
     </main>
   </div>
+  </div><!-- /#app-wrapper -->
 
   <script src="script.js"></script>
 </body>

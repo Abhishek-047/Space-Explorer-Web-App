@@ -139,64 +139,96 @@ function startSearch(query) {
 
 
 // ============================================================
-// FETCH RESULTS — ONE call, query-relevant on both sides
-//   HOF chain: .filter() → .sort() → .slice()
+// FETCH RESULTS — DUAL API (parallel)
+//   NASA Image Library → LEFT featured + some RIGHT cards
+//   NASA APOD (api_key) → mixed into RIGHT cards
 // ============================================================
 function fetchResults(query, signal) {
-  const url = SEARCH_BASE
+
+  // API 1: NASA Image Library (no key needed)
+  const imageUrl = SEARCH_BASE
     + "?q="         + encodeURIComponent(query)
     + "&media_type=image"
     + "&page_size=40";
 
-  fetch(url, { signal: signal })
-    .then(function (res) {
-      if (!res.ok) throw new Error("API error " + res.status);
-      return res.json();
-    })
-    .then(function (data) {
-      searchLoadingEl.style.display = "none";
+  // API 2: NASA APOD — uses your API_KEY, fetches 6 random APODs
+  const apodUrl = "https://api.nasa.gov/planetary/apod"
+    + "?api_key=" + API_KEY
+    + "&count=6";
 
-      const raw = data.collection.items;
+  // Fire both in parallel
+  Promise.all([
+    fetch(imageUrl, { signal: signal })
+      .then(function (res) {
+        if (!res.ok) throw new Error("Image API error " + res.status);
+        return res.json();
+      }),
+    fetch(apodUrl, { signal: signal })
+      .then(function (res) { return res.ok ? res.json() : []; })
+      .catch(function () { return []; }) // APOD failure never kills whole search
+  ])
+  .then(function (results) {
+    var imageData = results[0];
+    var apodData  = results[1];
 
-      // STEP 1 — filter: only items with a valid thumbnail
-      const withImages = raw.filter(function (item) {
-        return item.links && item.links.length > 0 && item.links[0].href;
-      });
+    searchLoadingEl.style.display = "none";
 
-      // STEP 2 — sort: A → Z by title
-      const sorted = withImages.sort(function (a, b) {
-        const tA = (a.data[0].title || "").toLowerCase();
-        const tB = (b.data[0].title || "").toLowerCase();
-        return tA < tB ? -1 : tA > tB ? 1 : 0;
-      });
+    var raw = imageData.collection.items;
 
-      // STEP 3 — slice: cap total
-      const results = sorted.slice(0, MAX_RESULTS);
-
-      if (results.length === 0) {
-        heroTitleSearchEl.textContent = "No results found";
-        heroDescSearchEl.textContent  = 'Try a different keyword instead of "' + query + '".';
-        return;
-      }
-
-      // First → LEFT featured panel
-      showFeatured(query, results[0]);
-
-      // Rest → RIGHT cards (all query-relevant)
-      results.slice(1).forEach(function (item) {
-        const card = buildCard(item);
-        if (card) searchResultsEl.appendChild(card);
-      });
-    })
-    .catch(function (err) {
-      if (err.name === "AbortError") return; // stale request cancelled — ignore
-      console.error("Search failed:", err);
-      searchLoadingEl.style.display = "none";
-      searchErrorEl.style.display   = "block";
-      searchErrorEl.textContent     = "⚠️ Search failed. Check your connection and try again.";
-      heroTitleSearchEl.textContent = "⚠️ Could not load results.";
-      heroDescSearchEl.textContent  = "";
+    // Filter → only items with a valid thumbnail
+    var withImages = raw.filter(function (item) {
+      return item.links && item.links.length > 0 && item.links[0].href;
     });
+
+    // Sort A → Z by title
+    var sorted = withImages.sort(function (a, b) {
+      var tA = (a.data[0].title || "").toLowerCase();
+      var tB = (b.data[0].title || "").toLowerCase();
+      return tA < tB ? -1 : tA > tB ? 1 : 0;
+    });
+
+    // Cap total & take first for featured
+    var capped = sorted.slice(0, MAX_RESULTS);
+
+    if (capped.length === 0) {
+      heroTitleSearchEl.textContent = "No results found";
+      heroDescSearchEl.textContent  = 'Try a different keyword instead of "' + query + '".';
+      return;
+    }
+
+    // results[0] → LEFT featured panel
+    showFeatured(query, capped[0]);
+
+    // RIGHT panel: interleave Image Library cards + APOD cards
+    var imgCards  = capped.slice(1);                                          // remaining image library
+    var apodCards = Array.isArray(apodData)
+      ? apodData.filter(function (a) { return a.media_type === "image" && a.url; })
+      : [];
+
+    var imgIdx = 0, apodIdx = 0, count = 0, MAX_RIGHT = 12;
+
+    while (count < MAX_RIGHT && (imgIdx < imgCards.length || apodIdx < apodCards.length)) {
+      // Add one Image Library card
+      if (imgIdx < imgCards.length && count < MAX_RIGHT) {
+        var c1 = buildCard(imgCards[imgIdx++]);
+        if (c1) { searchResultsEl.appendChild(c1); count++; }
+      }
+      // Add one APOD card
+      if (apodIdx < apodCards.length && count < MAX_RIGHT) {
+        var c2 = buildApodCard(apodCards[apodIdx++]);
+        if (c2) { searchResultsEl.appendChild(c2); count++; }
+      }
+    }
+  })
+  .catch(function (err) {
+    if (err.name === "AbortError") return;
+    console.error("Search failed:", err);
+    searchLoadingEl.style.display = "none";
+    searchErrorEl.style.display   = "block";
+    searchErrorEl.textContent     = "⚠️ Search failed. Check your connection and try again.";
+    heroTitleSearchEl.textContent = "⚠️ Could not load results.";
+    heroDescSearchEl.textContent  = "";
+  });
 }
 
 
@@ -237,41 +269,39 @@ function showFeatured(query, item) {
 
 
 // ============================================================
-// BUILD CARD — safe DOM construction (no innerHTML for API data)
+// BUILD CARD — NASA Image Library card
 // ============================================================
 function buildCard(item) {
-  const meta  = item.data[0];
-  const thumb = item.links[0];
+  var meta  = item.data[0];
+  var thumb = item.links[0];
 
-  const title = meta.title       || "Untitled";
-  const desc  = meta.description || "";
+  var title = meta.title       || "Untitled";
+  var desc  = meta.description || "";
 
-  // Create elements manually — textContent for all API data (XSS-safe)
-  const card = document.createElement("div");
+  var card = document.createElement("div");
   card.className = "result-card";
 
-  const img = document.createElement("img");
+  var img = document.createElement("img");
   img.src     = thumb.href;
   img.alt     = title;
   img.loading = "lazy";
 
-  const body = document.createElement("div");
+  var body = document.createElement("div");
   body.className = "result-copy";
 
-  const badge = document.createElement("span");
+  var badge = document.createElement("span");
   badge.className   = "result-badge";
   badge.textContent = "NASA";
 
-  const h3 = document.createElement("h3");
+  var h3 = document.createElement("h3");
   h3.textContent = title;
 
-  const p = document.createElement("p");
+  var p = document.createElement("p");
   p.textContent = desc;
 
   body.appendChild(badge);
   body.appendChild(h3);
   body.appendChild(p);
-
   card.appendChild(img);
   card.appendChild(body);
 
@@ -280,7 +310,45 @@ function buildCard(item) {
 
 
 // ============================================================
-// RESET TO DEFAULT — ← Back
+// BUILD APOD CARD — NASA APOD API card (uses your API_KEY)
+// ============================================================
+function buildApodCard(apod) {
+  if (!apod || !apod.url) return null;
+
+  var card = document.createElement("div");
+  card.className = "result-card";
+
+  var img = document.createElement("img");
+  img.src     = apod.hdurl || apod.url;
+  img.alt     = apod.title || "APOD";
+  img.loading = "lazy";
+  img.onerror = function () { this.src = apod.url; }; // fallback to SD
+
+  var body = document.createElement("div");
+  body.className = "result-copy";
+
+  var badge = document.createElement("span");
+  badge.className   = "result-badge apod-badge";
+  badge.textContent = "APOD";
+
+  var h3 = document.createElement("h3");
+  h3.textContent = apod.title || "Astronomy Picture";
+
+  var p = document.createElement("p");
+  p.textContent = apod.explanation || "";
+
+  body.appendChild(badge);
+  body.appendChild(h3);
+  body.appendChild(p);
+  card.appendChild(img);
+  card.appendChild(body);
+
+  return card;
+}
+
+
+// ============================================================
+// RESET TO DEFAULT — ← Back → goes back to landing hero
 // ============================================================
 function resetToDefault() {
   // Cancel any in-flight request
@@ -289,17 +357,73 @@ function resetToDefault() {
     activeController = null;
   }
 
-  // Restore left panel
+  // Restore left panel state (for next time app is shown)
   heroCopyEl.classList.remove("hero-copy--searching");
   featuredBlockEl.style.display = "none";
   defaultBlockEl.style.display  = "block";
   featuredImgEl.src             = "";
   resetBtnEl.style.display      = "none";
 
-  // Restore right panel
+  // Restore right panel state
   resultsViewEl.style.display = "none";
   planetViewEl.style.display  = "flex";
 
   // Clear input
   searchInputEl.value = "";
+
+  // ── Return to landing hero ──
+  var appWrapperEl  = document.getElementById("app-wrapper");
+  var landingHeroEl = document.getElementById("landing-hero");
+
+  if (appWrapperEl && landingHeroEl) {
+    // Fade out the app
+    appWrapperEl.style.animation = "heroExit 0.4s ease forwards";
+
+    setTimeout(function () {
+      appWrapperEl.style.display    = "none";
+      appWrapperEl.style.animation  = "";
+      appWrapperEl.classList.remove("app-wrapper--enter");
+
+      // Restore and fade in the landing hero
+      landingHeroEl.style.display = "flex";
+      landingHeroEl.classList.remove("landing-hero--exit");
+      landingHeroEl.style.opacity = "0";
+      landingHeroEl.style.animation = "appEnter 0.5s ease forwards";
+
+      // Clean up inline style after animation
+      setTimeout(function () {
+        landingHeroEl.style.animation = "";
+        landingHeroEl.style.opacity   = "";
+      }, 520);
+    }, 380);
+  }
 }
+
+
+// ============================================================
+// LANDING HERO — wires CTA to existing explore logic
+// ============================================================
+(function () {
+  var landingHeroEl  = document.getElementById("landing-hero");
+  var appWrapperEl   = document.getElementById("app-wrapper");
+  var landingExplore = document.getElementById("landing-explore-btn");
+
+  if (!landingExplore || !landingHeroEl || !appWrapperEl) return;
+
+  function transitionToApp() {
+    // Play exit animation on hero
+    landingHeroEl.classList.add("landing-hero--exit");
+
+    setTimeout(function () {
+      // Hide hero, reveal app
+      landingHeroEl.style.display = "none";
+      appWrapperEl.style.display  = "block";
+      appWrapperEl.classList.add("app-wrapper--enter");
+
+      // Trigger the existing Explore function (random keyword)
+      revealExplore();
+    }, 580); // matches CSS animation duration
+  }
+
+  landingExplore.addEventListener("click", transitionToApp);
+})();
