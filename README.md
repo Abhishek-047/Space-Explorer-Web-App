@@ -1,90 +1,113 @@
-# 🌌 Space Explorer Web App
+🌌 Space Explorer Web App
 
-## 🚀 Overview
-
-The Space Explorer Web App is a web-based application that allows users to explore space-related data using NASA's public API. The application fetches real-time data and displays it dynamically in a clean and responsive user interface.
+🚀 Overview
+Space Explorer is a premium web-based application that allows users to explore space imagery using NASA APIs. It provides a cinematic UI experience with real-time search, dynamic rendering, and an interactive landing page.
 
 ---
 
-## 🎯 Project Objective
+🎯 Project Objective
+This project demonstrates:
 
-This project is built to demonstrate:
-
-* JavaScript fundamentals
-* API integration using `fetch`
+* JavaScript fundamentals (DOM manipulation, events)
+* API integration using Fetch API
 * Dynamic UI rendering
-* Use of array higher-order functions (map, filter, sort)
+* Use of higher-order functions (filter, sort, slice)
+* Clean UI/UX design with modern frontend practices
 
 ---
 
-## 🔌 API Used
+🔌 APIs Used
 
-* NASA Open API
-  https://api.nasa.gov/
+1. NASA Open API (API Key Required)
+   https://api.nasa.gov/
 
----
+* Used for accessing general NASA data
 
-## ✨ Features (Planned)
+2. NASA Image and Video Library API (No API Key Required)
+   https://images-api.nasa.gov/
 
-* 📷 Display Astronomy Picture of the Day (APOD)
-* 🔍 Search functionality
-* 🎯 Filter results based on date
-* 🔃 Sort data (latest / oldest)
-* 📱 Responsive design (mobile, tablet, desktop)
+* Used for searching and fetching space images dynamically based on user queries
 
 ---
 
-## 🛠️ Tech Stack
+⚙️ API Handling Features
 
-* HTML
-* CSS
-* JavaScript
+* Efficient data fetching using Fetch API
+* AbortController to cancel stale requests
+* Error handling for failed API calls
+* Optimized search using filtering, sorting, and slicing
+
+---
+
+✨ Features
+
+### 🚀 Core Features
+
+* 🔍 Search any space object (planet, galaxy, nebula, etc.)
+* 🖼️ Dynamic image results from NASA API
+* ⭐ Featured result (highlighted main image with details)
+* 📊 Filter + Sort + Slice implementation
+* ⌨️ Search via button + Enter key
+* ❌ Error handling + loading states
+* ⚡ Debouncing (optimized input handling)
+* 🧠 AbortController (cancel stale API calls)
+
+### 🎨 UI / UX Features
+
+* 🌌 Cinematic landing page (hero section)
+* 🪐 Glowing planet visual with animation
+* 💫 Smooth transitions & hover effects
+* 📱 Fully responsive design
+* 🎯 Clean split layout (left: info, right: visuals)
+
+---
+
+🛠️ Tech Stack
+
+* HTML5
+* CSS3 (Modern UI + animations)
+* JavaScript (Vanilla JS)
 * Fetch API
 
 ---
 
-## 📂 Project Structure
+📂 Project Structure
 
-```
-space-explorer-app/
-├── assets/
+space-exp-project/
 ├── index.html
 ├── style.css
 ├── script.js
+├── hero-globe.png
 └── README.md
-```
 
 ---
 
-## ⚙️ Setup Instructions
+⚙️ Setup Instructions
 
 1. Clone the repository
+   git clone https://github.com/Abhishek-047/Space-Explorer-Web-App.git
 
-   ```
-   git clone https://github.com/your-username/space-explorer-app.git
-   ```
 2. Navigate to the project folder
-3. Open `script.js` and add your API key
-4. Open `index.html` in your browser
+   cd Space-Explorer-Web-App
+
+3. Open `index.html` in your browser
 
 ---
 
-## 🔮 Future Enhancements
+🔮 Future Enhancements
 
-* 🌙 Dark mode
-* ❤️ Favorites using local storage
-* ⏳ Loading indicators
+* ❤️ Favorite / Like system (with Local Storage)
+* 🌙 Dark / Light mode toggle
 * 📄 Pagination / Infinite scroll
+* 🔄 Throttling for better performance
+* 🎛️ Advanced filtering options
 
 ---
 
-## 📌 Note
-
-This project is developed as part of a college assignment to demonstrate frontend development skills and API integration.
+📌 Note
+This project is built as part of a frontend development learning journey, focusing on real-world API usage and modern UI design.
 
 ---
 
-## 👨‍💻 Author
-
+👨‍💻 Author
 Abhishek Panigrahi
-
