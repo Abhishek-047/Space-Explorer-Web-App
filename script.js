@@ -1,429 +1,388 @@
-// ============================================================
-// Space Explorer — script.js
-//
-// API SPLIT:
-//  ONE call to SEARCH_BASE (NASA Image Library) per query.
-//  results[0]    → LEFT  panel: featured image + details
-//  results[1..N] → RIGHT panel: 2-col image cards (query-relevant)
-//
-// KEY BEHAVIOURS:
-//  • AbortController cancels stale in-flight requests
-//  • No auto-search-on-keystroke (only button + Enter trigger)
-//  • All API data set via textContent — no innerHTML XSS risk
-// ============================================================
+/* Space Explorer Script */
 
+// My config
+let API_KEY = "anTw6c7FrsLYGyOqEz9mzaly1aJefNGTphSVuvFy";
+let SEARCH_BASE = "https://images-api.nasa.gov/search";
 
-// ---- CONFIG ----
-const API_KEY     = "anTw6c7FrsLYGyOqEz9mzaly1aJefNGTphSVuvFy";
-const SEARCH_BASE = "https://images-api.nasa.gov/search";
-const MAX_RESULTS = 13; // 1 featured + 12 cards
-
-const EXPLORE_KEYWORDS = [
+let exploreKeywords = [
   "galaxy", "nebula", "mars", "saturn", "jupiter", "moon",
   "aurora", "comet", "supernova", "asteroid",
   "milky way", "black hole", "solar system", "space station"
 ];
 
-// Tracks the active fetch so we can cancel stale requests
-let activeController = null;
+// Get elements for left panel
+let heroCopyEl = document.getElementById("hero-copy");
+let defaultBlockEl = document.getElementById("default-block");
+let featuredBlockEl = document.getElementById("featured-block");
+let resetBtnEl = document.getElementById("reset-btn");
+let metaTopicEl = document.getElementById("meta-topic");
 
+let featuredImgEl = document.getElementById("featured-img");
+let heroEyebrowSearchEl = document.getElementById("hero-eyebrow-search");
+let heroTitleSearchEl = document.getElementById("hero-title-search");
+let heroDescSearchEl = document.getElementById("hero-desc-search");
+let featTopicEl = document.getElementById("feat-topic");
+let featDateEl = document.getElementById("feat-date");
+let featCenterEl = document.getElementById("feat-center");
 
-// ---- ELEMENT REFERENCES ----
+// Get elements for right panel
+let planetViewEl = document.getElementById("planet-view");
+let exploreBtnEl = document.getElementById("explore-btn");
+let exploreAgainEl = document.getElementById("explore-again-btn");
+let resultsViewEl = document.getElementById("results-view");
+let resultsLabelEl = document.getElementById("results-label");
+let searchLoadingEl = document.getElementById("search-loading");
+let searchErrorEl = document.getElementById("search-error");
+let searchResultsEl = document.getElementById("search-results");
 
-// Left panel blocks
-const heroCopyEl      = document.getElementById("hero-copy");
-const defaultBlockEl  = document.getElementById("default-block");
-const featuredBlockEl = document.getElementById("featured-block");
-const resetBtnEl      = document.getElementById("reset-btn");
-const metaTopicEl     = document.getElementById("meta-topic");
+// Navbar elements
+let searchInputEl = document.getElementById("search-input");
+let searchBtnEl = document.getElementById("search-btn");
 
-// Left panel — featured state elements
-const featuredImgEl       = document.getElementById("featured-img");
-const heroEyebrowSearchEl = document.getElementById("hero-eyebrow-search");
-const heroTitleSearchEl   = document.getElementById("hero-title-search");
-const heroDescSearchEl    = document.getElementById("hero-desc-search");
-const featTopicEl         = document.getElementById("feat-topic");
-const featDateEl          = document.getElementById("feat-date");
-const featCenterEl        = document.getElementById("feat-center");
+// Sort element
+let sortOptionsEl = document.getElementById("sort-options");
 
-// Right panel
-const planetViewEl    = document.getElementById("planet-view");
-const exploreBtnEl    = document.getElementById("explore-btn");
-const exploreAgainEl  = document.getElementById("explore-again-btn");
-const resultsViewEl   = document.getElementById("results-view");
-const resultsLabelEl  = document.getElementById("results-label");
-const searchLoadingEl = document.getElementById("search-loading");
-const searchErrorEl   = document.getElementById("search-error");
-const searchResultsEl = document.getElementById("search-results");
+// Main array to store my results
+let myResults = [];
 
-// Navbar
-const searchInputEl = document.getElementById("search-input");
-const searchBtnEl   = document.getElementById("search-btn");
-
-
-// ============================================================
-// EVENT LISTENERS
-//   • Explore buttons → random topic
-//   • Search button + Enter → query from input
-//   • NO auto-search-on-input (avoids API spam)
-//   • ← Back → restore default
-// ============================================================
-exploreBtnEl.addEventListener("click",  revealExplore);
+// Adding event listeners
+exploreBtnEl.addEventListener("click", revealExplore);
 exploreAgainEl.addEventListener("click", revealExplore);
-searchBtnEl.addEventListener("click",   handleSearch);
-resetBtnEl.addEventListener("click",    resetToDefault);
+searchBtnEl.addEventListener("click", handleSearch);
+resetBtnEl.addEventListener("click", resetToDefault);
 
 searchInputEl.addEventListener("keydown", function (e) {
-  if (e.key === "Enter") handleSearch();
+  if (e.key == "Enter") {
+    handleSearch();
+  }
 });
 
+// When dropdown changes, I update the cards
+sortOptionsEl.addEventListener("change", function() {
+    renderCards(myResults);
+});
 
-// ============================================================
-// EXPLORE — picks a random keyword each click
-// ============================================================
+// Explore random space items
 function revealExplore() {
-  const keyword = EXPLORE_KEYWORDS[Math.floor(Math.random() * EXPLORE_KEYWORDS.length)];
-  // Fill search box so user sees what was explored
+  let randomIndex = Math.floor(Math.random() * exploreKeywords.length);
+  let keyword = exploreKeywords[randomIndex];
   searchInputEl.value = keyword;
   startSearch(keyword);
 }
 
-
-// ============================================================
-// HANDLE SEARCH — reads typed query
-// ============================================================
+// User clicked enter or button
 function handleSearch() {
-  const query = searchInputEl.value.trim();
-  if (!query) { searchInputEl.focus(); return; }
+  let query = searchInputEl.value;
+  if (query == "") {
+    searchInputEl.focus();
+    return;
+  }
   startSearch(query);
 }
 
-
-// ============================================================
-// START SEARCH — single entry point
-// ============================================================
 function startSearch(query) {
-  // Cancel any in-flight request from a previous search
-  if (activeController) {
-    activeController.abort();
-  }
-  activeController = new AbortController();
-
-  // Right panel: switch to results + spinner
-  planetViewEl.style.display    = "none";
-  resultsViewEl.style.display   = "flex";
-  resultsLabelEl.textContent    = query;
+  // Show right panel loading
+  planetViewEl.style.display = "none";
+  resultsViewEl.style.display = "flex";
+  resultsLabelEl.textContent = query;
   searchLoadingEl.style.display = "flex";
-  searchErrorEl.style.display   = "none";
-  searchResultsEl.innerHTML     = "";
+  searchErrorEl.style.display = "none";
+  searchResultsEl.innerHTML = "";
+  
+  // Set default sorting option again
+  sortOptionsEl.value = "default";
 
-  // Left panel: show ← Back + featured block (loading state)
-  resetBtnEl.style.display      = "inline-flex";
-  heroCopyEl.classList.add("hero-copy--searching");   // removes top gap
-  defaultBlockEl.style.display  = "none";
+  // Show left panel loading
+  resetBtnEl.style.display = "inline-flex";
+  heroCopyEl.classList.add("hero-copy--searching");
+  defaultBlockEl.style.display = "none";
   featuredBlockEl.style.display = "flex";
 
-  // Pre-fill with loading indicators
-  featuredImgEl.src               = "";
+  // Clear data first
+  featuredImgEl.src = "";
   heroEyebrowSearchEl.textContent = query;
-  heroTitleSearchEl.textContent   = "Loading…";
-  heroDescSearchEl.textContent    = "";
-  if (featTopicEl)  featTopicEl.textContent  = query;
-  if (featDateEl)   featDateEl.textContent   = "—";
-  if (featCenterEl) featCenterEl.textContent = "—";
-  if (metaTopicEl)  metaTopicEl.textContent  = query;
+  heroTitleSearchEl.textContent = "Loading...";
+  heroDescSearchEl.textContent = "";
+  
+  if (featTopicEl) {
+      featTopicEl.textContent = query;
+  }
+  if (featDateEl) {
+      featDateEl.textContent = "-";
+  }
+  if (featCenterEl) {
+      featCenterEl.textContent = "-";
+  }
+  if (metaTopicEl) {
+      metaTopicEl.textContent = query;
+  }
 
-  // Single API call — results split between left (featured) and right (cards)
-  fetchResults(query, activeController.signal);
+  // Go to fetch 
+  fetchResults(query);
 }
 
+function fetchResults(query) {
+  let imageUrl = SEARCH_BASE + "?q=" + encodeURIComponent(query) + "&media_type=image&page_size=40";
+  let apodUrl = "https://api.nasa.gov/planetary/apod?api_key=" + API_KEY + "&count=6";
 
-// ============================================================
-// FETCH RESULTS — DUAL API (parallel)
-//   NASA Image Library → LEFT featured + some RIGHT cards
-//   NASA APOD (api_key) → mixed into RIGHT cards
-// ============================================================
-function fetchResults(query, signal) {
+  // Using fetch to get data from NASA APIs
+  let imagePromise = fetch(imageUrl).then(function(res) { return res.json(); });
+  let apodPromise = fetch(apodUrl).then(function(res) { return res.json(); }).catch(function() { return []; });
 
-  // API 1: NASA Image Library (no key needed)
-  const imageUrl = SEARCH_BASE
-    + "?q="         + encodeURIComponent(query)
-    + "&media_type=image"
-    + "&page_size=40";
-
-  // API 2: NASA APOD — uses your API_KEY, fetches 6 random APODs
-  const apodUrl = "https://api.nasa.gov/planetary/apod"
-    + "?api_key=" + API_KEY
-    + "&count=6";
-
-  // Fire both in parallel
-  Promise.all([
-    fetch(imageUrl, { signal: signal })
-      .then(function (res) {
-        if (!res.ok) throw new Error("Image API error " + res.status);
-        return res.json();
-      }),
-    fetch(apodUrl, { signal: signal })
-      .then(function (res) { return res.ok ? res.json() : []; })
-      .catch(function () { return []; }) // APOD failure never kills whole search
-  ])
-  .then(function (results) {
-    var imageData = results[0];
-    var apodData  = results[1];
+  Promise.all([imagePromise, apodPromise]).then(function(results) {
+    let imageData = results[0];
+    let apodData = results[1];
 
     searchLoadingEl.style.display = "none";
 
-    var raw = imageData.collection.items;
+    let raw = imageData.collection.items;
+    let withImages = [];
 
-    // Filter → only items with a valid thumbnail
-    var withImages = raw.filter(function (item) {
-      return item.links && item.links.length > 0 && item.links[0].href;
+    // Loop through images from NASA
+    for (let i = 0; i < raw.length; i++) {
+        if (raw[i].links && raw[i].links.length > 0 && raw[i].links[0].href) {
+            withImages.push(raw[i]);
+        }
+    }
+
+    // Sort by name like original code
+    withImages.sort(function(a, b) {
+        let nameA = (a.data[0].title || "").toLowerCase();
+        let nameB = (b.data[0].title || "").toLowerCase();
+        if (nameA < nameB) return -1;
+        if (nameA > nameB) return 1;
+        return 0;
     });
 
-    // Sort A → Z by title
-    var sorted = withImages.sort(function (a, b) {
-      var tA = (a.data[0].title || "").toLowerCase();
-      var tB = (b.data[0].title || "").toLowerCase();
-      return tA < tB ? -1 : tA > tB ? 1 : 0;
-    });
-
-    // Cap total & take first for featured
-    var capped = sorted.slice(0, MAX_RESULTS);
-
-    if (capped.length === 0) {
+    if (withImages.length == 0) {
       heroTitleSearchEl.textContent = "No results found";
-      heroDescSearchEl.textContent  = 'Try a different keyword instead of "' + query + '".';
+      heroDescSearchEl.textContent = "Try a different keyword instead of " + query;
       return;
     }
 
-    // results[0] → LEFT featured panel
-    showFeatured(query, capped[0]);
+    // Pass the first one to featured left side
+    showFeatured(query, withImages[0]);
 
-    // RIGHT panel: interleave Image Library cards + APOD cards
-    var imgCards  = capped.slice(1);                                          // remaining image library
-    var apodCards = Array.isArray(apodData)
-      ? apodData.filter(function (a) { return a.media_type === "image" && a.url; })
-      : [];
+    // Clear old results
+    myResults = [];
 
-    var imgIdx = 0, apodIdx = 0, count = 0, MAX_RIGHT = 12;
-
-    while (count < MAX_RIGHT && (imgIdx < imgCards.length || apodIdx < apodCards.length)) {
-      // Add one Image Library card
-      if (imgIdx < imgCards.length && count < MAX_RIGHT) {
-        var c1 = buildCard(imgCards[imgIdx++]);
-        if (c1) { searchResultsEl.appendChild(c1); count++; }
-      }
-      // Add one APOD card
-      if (apodIdx < apodCards.length && count < MAX_RIGHT) {
-        var c2 = buildApodCard(apodCards[apodIdx++]);
-        if (c2) { searchResultsEl.appendChild(c2); count++; }
-      }
+    let imgCards = [];
+    // Convert remaining API items to my friendly format
+    for (let i = 1; i < withImages.length; i++) {
+        let item = withImages[i];
+        let meta = item.data[0];
+        
+        let dateVal = new Date(0);
+        if (meta.date_created) {
+            dateVal = new Date(meta.date_created);
+        }
+        
+        imgCards.push({
+            type: "NASA",
+            title: meta.title || "Untitled",
+            desc: meta.description || "",
+            img: item.links[0].href,
+            date: dateVal,
+            year: dateVal.getFullYear(),
+            defaultSortIndex: i
+        });
     }
-  })
-  .catch(function (err) {
-    if (err.name === "AbortError") return;
-    console.error("Search failed:", err);
+
+    let apodCards = [];
+    if (apodData.length > 0) {
+        for (let i = 0; i < apodData.length; i++) {
+            let apod = apodData[i];
+            if (apod.media_type == "image" && apod.url) {
+                let dateVal = new Date();
+                if (apod.date) {
+                    dateVal = new Date(apod.date);
+                }
+                apodCards.push({
+                    type: "APOD",
+                    title: apod.title || "Astronomy Picture",
+                    desc: apod.explanation || "",
+                    img: apod.hdurl || apod.url,
+                    date: dateVal,
+                    year: dateVal.getFullYear()
+                });
+            }
+        }
+    }
+    
+    // Mix them up like the original
+    let imgIdx = 0;
+    let apodIdx = 0;
+    while(imgIdx < imgCards.length || apodIdx < apodCards.length) {
+        if (imgIdx < imgCards.length) {
+            myResults.push(imgCards[imgIdx]);
+            imgIdx++;
+        }
+        if (apodIdx < apodCards.length) {
+            myResults.push(apodCards[apodIdx]);
+            apodIdx++;
+        }
+    }
+
+    renderCards(myResults);
+
+  }).catch(function(err) {
+    console.log(err);
     searchLoadingEl.style.display = "none";
-    searchErrorEl.style.display   = "block";
-    searchErrorEl.textContent     = "⚠️ Search failed. Check your connection and try again.";
-    heroTitleSearchEl.textContent = "⚠️ Could not load results.";
-    heroDescSearchEl.textContent  = "";
+    searchErrorEl.style.display = "block";
+    searchErrorEl.textContent = "Error: Search failed.";
+    heroTitleSearchEl.textContent = "Could not load results.";
+    heroDescSearchEl.textContent = "";
   });
 }
 
+// Function to draw right side cards
+function renderCards(dataArray) {
+    // Empty the HTML first
+    searchResultsEl.innerHTML = "";
+    
+    // Copy the array to preserve original order
+    let cardsToRender = [];
+    for(let i=0; i<dataArray.length; i++){
+        cardsToRender.push(dataArray[i]);
+    }
+    
+    let sortBy = sortOptionsEl.value;
+    
+    if (sortBy == "recent") {
+        cardsToRender.sort(function(a, b) {
+            return b.date - a.date;
+        });
+    } else if (sortBy == "date") {
+        cardsToRender.sort(function(a, b) {
+            return a.date - b.date; // oldest first
+        });
+    } else if (sortBy == "year") {
+        cardsToRender.sort(function(a, b) {
+            return a.year - b.year; // ascending year
+        });
+    }
+    // "default" leaves it how it was
+    
+    // Draw in view
+    for (let i=0; i < cardsToRender.length; i++) {
+        // Stop after 12 cards max limit
+        if (i >= 12) {
+            break;
+        }
+        
+        let item = cardsToRender[i];
+        
+        let card = document.createElement("div");
+        card.className = "result-card";
 
-// ============================================================
-// SHOW FEATURED — fills LEFT panel with first result
-// ============================================================
+        let img = document.createElement("img");
+        img.src = item.img;
+        img.alt = item.title;
+        img.loading = "lazy";
+        
+        let body = document.createElement("div");
+        body.className = "result-copy";
+        
+        let badge = document.createElement("span");
+        if (item.type == "APOD") {
+            badge.className = "result-badge apod-badge";
+        } else {
+            badge.className = "result-badge";
+        }
+        badge.textContent = item.type;
+        
+        let h3 = document.createElement("h3");
+        h3.textContent = item.title;
+        
+        let p = document.createElement("p");
+        p.textContent = item.desc;
+        
+        body.appendChild(badge);
+        body.appendChild(h3);
+        body.appendChild(p);
+        card.appendChild(img);
+        card.appendChild(body);
+        
+        searchResultsEl.appendChild(card);
+    }
+}
+
+// Left side featured view update
 function showFeatured(query, item) {
-  const meta  = item.data[0];
-  const thumb = item.links[0];
+  let meta = item.data[0];
+  let thumb = item.links[0];
 
-  // Image
   featuredImgEl.src = thumb.href;
-  featuredImgEl.alt = meta.title || query;
+  featuredImgEl.alt = meta.title;
 
-  // Text
   heroEyebrowSearchEl.textContent = query;
-  heroTitleSearchEl.textContent   = meta.title       || query;
-  heroDescSearchEl.textContent    = meta.description || "";
+  heroTitleSearchEl.textContent = meta.title || query;
+  heroDescSearchEl.textContent = meta.description || "";
 
-  // Info cards
-  if (featTopicEl) featTopicEl.textContent = query;
+  if (featTopicEl) {
+    featTopicEl.textContent = query;
+  }
 
   if (featDateEl && meta.date_created) {
-    try {
-      var d = new Date(meta.date_created);
-      featDateEl.textContent = d.toLocaleDateString("en-US", {
-        year: "numeric", month: "long", day: "numeric"
-      });
-    } catch (e) {
-      featDateEl.textContent = meta.date_created;
-    }
+    let d = new Date(meta.date_created);
+    // basic date string
+    featDateEl.textContent = d.toDateString(); 
   }
 
   if (featCenterEl) {
-    featCenterEl.textContent = meta.center || meta.secondary_creator || "NASA";
+    featCenterEl.textContent = meta.center || "NASA";
   }
 }
 
-
-// ============================================================
-// BUILD CARD — NASA Image Library card
-// ============================================================
-function buildCard(item) {
-  var meta  = item.data[0];
-  var thumb = item.links[0];
-
-  var title = meta.title       || "Untitled";
-  var desc  = meta.description || "";
-
-  var card = document.createElement("div");
-  card.className = "result-card";
-
-  var img = document.createElement("img");
-  img.src     = thumb.href;
-  img.alt     = title;
-  img.loading = "lazy";
-
-  var body = document.createElement("div");
-  body.className = "result-copy";
-
-  var badge = document.createElement("span");
-  badge.className   = "result-badge";
-  badge.textContent = "NASA";
-
-  var h3 = document.createElement("h3");
-  h3.textContent = title;
-
-  var p = document.createElement("p");
-  p.textContent = desc;
-
-  body.appendChild(badge);
-  body.appendChild(h3);
-  body.appendChild(p);
-  card.appendChild(img);
-  card.appendChild(body);
-
-  return card;
-}
-
-
-// ============================================================
-// BUILD APOD CARD — NASA APOD API card (uses your API_KEY)
-// ============================================================
-function buildApodCard(apod) {
-  if (!apod || !apod.url) return null;
-
-  var card = document.createElement("div");
-  card.className = "result-card";
-
-  var img = document.createElement("img");
-  img.src     = apod.hdurl || apod.url;
-  img.alt     = apod.title || "APOD";
-  img.loading = "lazy";
-  img.onerror = function () { this.src = apod.url; }; // fallback to SD
-
-  var body = document.createElement("div");
-  body.className = "result-copy";
-
-  var badge = document.createElement("span");
-  badge.className   = "result-badge apod-badge";
-  badge.textContent = "APOD";
-
-  var h3 = document.createElement("h3");
-  h3.textContent = apod.title || "Astronomy Picture";
-
-  var p = document.createElement("p");
-  p.textContent = apod.explanation || "";
-
-  body.appendChild(badge);
-  body.appendChild(h3);
-  body.appendChild(p);
-  card.appendChild(img);
-  card.appendChild(body);
-
-  return card;
-}
-
-
-// ============================================================
-// RESET TO DEFAULT — ← Back → goes back to landing hero
-// ============================================================
+// Reset everything to original landing screen
 function resetToDefault() {
-  // Cancel any in-flight request
-  if (activeController) {
-    activeController.abort();
-    activeController = null;
-  }
-
-  // Restore left panel state (for next time app is shown)
   heroCopyEl.classList.remove("hero-copy--searching");
   featuredBlockEl.style.display = "none";
-  defaultBlockEl.style.display  = "block";
-  featuredImgEl.src             = "";
-  resetBtnEl.style.display      = "none";
+  defaultBlockEl.style.display = "block";
+  featuredImgEl.src = "";
+  resetBtnEl.style.display = "none";
 
-  // Restore right panel state
   resultsViewEl.style.display = "none";
-  planetViewEl.style.display  = "flex";
+  planetViewEl.style.display = "flex";
 
-  // Clear input
   searchInputEl.value = "";
 
-  // ── Return to landing hero ──
-  var appWrapperEl  = document.getElementById("app-wrapper");
-  var landingHeroEl = document.getElementById("landing-hero");
+  // Go back manually with simple timeout delays
+  let appWrapperEl = document.getElementById("app-wrapper");
+  let landingHeroEl = document.getElementById("landing-hero");
 
-  if (appWrapperEl && landingHeroEl) {
-    // Fade out the app
-    appWrapperEl.style.animation = "heroExit 0.4s ease forwards";
+  appWrapperEl.style.animation = "heroExit 0.4s ease forwards";
+
+  setTimeout(function () {
+    appWrapperEl.style.display = "none";
+    appWrapperEl.style.animation = "";
+    appWrapperEl.classList.remove("app-wrapper--enter");
+
+    landingHeroEl.style.display = "flex";
+    landingHeroEl.classList.remove("landing-hero--exit");
+    landingHeroEl.style.opacity = "0";
+    landingHeroEl.style.animation = "appEnter 0.5s ease forwards";
 
     setTimeout(function () {
-      appWrapperEl.style.display    = "none";
-      appWrapperEl.style.animation  = "";
-      appWrapperEl.classList.remove("app-wrapper--enter");
-
-      // Restore and fade in the landing hero
-      landingHeroEl.style.display = "flex";
-      landingHeroEl.classList.remove("landing-hero--exit");
-      landingHeroEl.style.opacity = "0";
-      landingHeroEl.style.animation = "appEnter 0.5s ease forwards";
-
-      // Clean up inline style after animation
-      setTimeout(function () {
-        landingHeroEl.style.animation = "";
-        landingHeroEl.style.opacity   = "";
-      }, 520);
-    }, 380);
-  }
+      landingHeroEl.style.animation = "";
+      landingHeroEl.style.opacity = "";
+    }, 500);
+  }, 400);
 }
 
+// Initial Landing setup functions
+let landingHeroEl = document.getElementById("landing-hero");
+let appWrapperEl = document.getElementById("app-wrapper");
+let landingExplore = document.getElementById("landing-explore-btn");
 
-// ============================================================
-// LANDING HERO — wires CTA to existing explore logic
-// ============================================================
-(function () {
-  var landingHeroEl  = document.getElementById("landing-hero");
-  var appWrapperEl   = document.getElementById("app-wrapper");
-  var landingExplore = document.getElementById("landing-explore-btn");
+landingExplore.addEventListener("click", function() {
+  landingHeroEl.classList.add("landing-hero--exit");
 
-  if (!landingExplore || !landingHeroEl || !appWrapperEl) return;
+  setTimeout(function () {
+    landingHeroEl.style.display = "none";
+    appWrapperEl.style.display = "block";
+    appWrapperEl.classList.add("app-wrapper--enter");
 
-  function transitionToApp() {
-    // Play exit animation on hero
-    landingHeroEl.classList.add("landing-hero--exit");
-
-    setTimeout(function () {
-      // Hide hero, reveal app
-      landingHeroEl.style.display = "none";
-      appWrapperEl.style.display  = "block";
-      appWrapperEl.classList.add("app-wrapper--enter");
-
-      // Trigger the existing Explore function (random keyword)
-      revealExplore();
-    }, 580); // matches CSS animation duration
-  }
-
-  landingExplore.addEventListener("click", transitionToApp);
-})();
+    revealExplore();
+  }, 500);
+});

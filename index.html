@@ -198,10 +198,18 @@
                   <p class="results-kicker">Search feed</p>
                   <h2 id="results-label">Results</h2>
                 </div>
-                <!-- Explore Again button in results topbar -->
-                <button class="explore-pill-btn explore-pill-sm" id="explore-again-btn" type="button">
-                  ✦ Explore Again
-                </button>
+                <!-- Sort option and Explore Again button in results topbar -->
+                <div style="display: flex; gap: 15px; align-items: center;">
+                  <select id="sort-options" style="background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; padding: 8px 15px; cursor: pointer; font-family: inherit; font-size: 14px; outline: none;">
+                    <option value="default" style="background: #000;">Default</option>
+                    <option value="recent" style="background: #000;">Recent</option>
+                    <option value="date" style="background: #000;">Date (Oldest)</option>
+                    <option value="year" style="background: #000;">Year</option>
+                  </select>
+                  <button class="explore-pill-btn explore-pill-sm" id="explore-again-btn" type="button">
+                    ✦ Explore Again
+                  </button>
+                </div>
               </div>
 
               <!-- Loading spinner -->
