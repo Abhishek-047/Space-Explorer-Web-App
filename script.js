@@ -136,14 +136,9 @@ function fetchResults(query) {
     searchLoadingEl.style.display = "none";
 
     let raw = imageData.collection.items;
-    let withImages = [];
 
-    // Loop through images from NASA
-    for (let i = 0; i < raw.length; i++) {
-        if (raw[i].links && raw[i].links.length > 0 && raw[i].links[0].href) {
-            withImages.push(raw[i]);
-        }
-    }
+    // Filter images from NASA using a higher-order function
+    let withImages = raw.filter(item => item.links && item.links.length > 0 && item.links[0].href);
 
     // Sort by name like original code
     withImages.sort(function(a, b) {
@@ -166,48 +161,36 @@ function fetchResults(query) {
     // Clear old results
     myResults = [];
 
-    let imgCards = [];
-    // Convert remaining API items to my friendly format
-    for (let i = 1; i < withImages.length; i++) {
-        let item = withImages[i];
+    // Convert remaining API items to my friendly format using map
+    let imgCards = withImages.slice(1).map((item, index) => {
         let meta = item.data[0];
+        let dateVal = meta.date_created ? new Date(meta.date_created) : new Date(0);
         
-        let dateVal = new Date(0);
-        if (meta.date_created) {
-            dateVal = new Date(meta.date_created);
-        }
-        
-        imgCards.push({
+        return {
             type: "NASA",
             title: meta.title || "Untitled",
             desc: meta.description || "",
             img: item.links[0].href,
             date: dateVal,
             year: dateVal.getFullYear(),
-            defaultSortIndex: i
-        });
-    }
+            defaultSortIndex: index + 1
+        };
+    });
 
-    let apodCards = [];
-    if (apodData.length > 0) {
-        for (let i = 0; i < apodData.length; i++) {
-            let apod = apodData[i];
-            if (apod.media_type == "image" && apod.url) {
-                let dateVal = new Date();
-                if (apod.date) {
-                    dateVal = new Date(apod.date);
-                }
-                apodCards.push({
-                    type: "APOD",
-                    title: apod.title || "Astronomy Picture",
-                    desc: apod.explanation || "",
-                    img: apod.hdurl || apod.url,
-                    date: dateVal,
-                    year: dateVal.getFullYear()
-                });
-            }
-        }
-    }
+    // Filter and map APOD data using higher-order functions
+    let apodCards = apodData
+        .filter(apod => apod.media_type == "image" && apod.url)
+        .map(apod => {
+            let dateVal = apod.date ? new Date(apod.date) : new Date();
+            return {
+                type: "APOD",
+                title: apod.title || "Astronomy Picture",
+                desc: apod.explanation || "",
+                img: apod.hdurl || apod.url,
+                date: dateVal,
+                year: dateVal.getFullYear()
+            };
+        });
     
     // Mix them up like the original
     let imgIdx = 0;
@@ -240,11 +223,8 @@ function renderCards(dataArray) {
     // Empty the HTML first
     searchResultsEl.innerHTML = "";
     
-    // Copy the array to preserve original order
-    let cardsToRender = [];
-    for(let i=0; i<dataArray.length; i++){
-        cardsToRender.push(dataArray[i]);
-    }
+    // Copy the array to preserve original order using map
+    let cardsToRender = dataArray.map(item => item);
     
     let sortBy = sortOptionsEl.value;
     
@@ -263,14 +243,8 @@ function renderCards(dataArray) {
     }
     // "default" leaves it how it was
     
-    // Draw in view
-    for (let i=0; i < cardsToRender.length; i++) {
-        // Stop after 12 cards max limit
-        if (i >= 12) {
-            break;
-        }
-        
-        let item = cardsToRender[i];
+    // Draw in view using higher-order slice and forEach
+    cardsToRender.slice(0, 12).forEach(item => {
         
         let card = document.createElement("div");
         card.className = "result-card";
@@ -304,7 +278,7 @@ function renderCards(dataArray) {
         card.appendChild(body);
         
         searchResultsEl.appendChild(card);
-    }
+    });
 }
 
 // Left side featured view update
